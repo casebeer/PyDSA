@@ -46,15 +46,15 @@ SAMPLEsize = 16384          # default sample size
 SAMPLEdepth = 0             # 0 normal, 1 long
 UPDATEspeed = 1.1           # Update speed can be increased when problems if PC too slow, default 1.1
 ZEROpadding = 0             # ZEROpadding for signal interpolation between frequency samples (0=none)
-                            
+
 DBdivlist = [1, 2, 3, 5, 10, 20] # dB per division
 DBdivindex = 5              # 20 dB/div as initial value
 
 DBlevel = 0                 # Reference level
 
-LONGfftsize = 262144        # FFT to do on long buffer. larger FFT takes more time
+LONGfftsize = 2**22 #262144        # FFT to do on long buffer. larger FFT takes more time
 fftsamples = 16384           # size of FFT we are using - recalculated in DoFFT()
- 
+
 # Colors that can be modified
 COLORframes = "#000080"     # Color = "#rrggbb" rr=red gg=green bb=blue, Hexadecimal values 00 - ff
 COLORcanvas = "#000000"
