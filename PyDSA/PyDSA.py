@@ -6,18 +6,25 @@
 # 17/9/15 Rich Heslip VE3MKC
 # modified to capture samples from Rigo DS1102E scope for a basic 100Mhz SA
 #
+
+import logging
+logger = logging.getLogger(__name__)
+
 import math
 import time
 import numpy
 import tkFont
 import sys
-import visa
+
+import sweep
+
 from time import sleep
 from Tkinter import *
 from tkFileDialog import askopenfilename
 from tkSimpleDialog import askstring
 from tkMessageBox import *
 
+CANVAS = None
 
 NUMPYenabled = True         # If NUMPY installed, then the FFT calculations is 4x faster than the own FFT calculation
 
@@ -31,7 +38,7 @@ Vdiv = 8                    # Number of vertical divisions
 
 TRACEmode = 1               # 1 normal mode, 2 max hold, 3 average
 TRACEaverage = 10           # Number of average sweeps for average mode
-TRACEreset = True           # True for first new trace, reset max hold and averageing 
+TRACEreset = True           # True for first new trace, reset max hold and averageing
 SWEEPsingle = False         # flag to sweep once
 
 SAMPLErate = 1000000        # scope sample rate, read from scope when we read the buffer
@@ -82,7 +89,7 @@ SNmeasurement = True       # True for signal to noise measurement between signal
 SNresult = 0.0              # Result of signal to noise measurement
 SNwidth = 0
 
-                            
+
 # Other global variables required in various routines
 GRW = GRWN                  # Initialize GRW
 GRH = GRHN                  # Initialize GRH
@@ -133,24 +140,24 @@ def on_click(self, event):
 def Bmarker1(event):
     global Marker1x
     global Marker1y
-    
+
     Marker1x=event.x
     Marker1y=event.y
 
 def Bmarker2(event):
     global Marker2x
     global Marker2y
-    
+
     Marker2x=event.x
     Marker2y=event.y
     #print "button 2 clicked at", event.x, event.y
-    
+
 def BNormalmode():
     global TRACEmode
 
     TRACEmode = 1
     UpdateScreen()          # Always Update
-    
+
 
 def BMaxholdmode():
     global TRACEmode
@@ -159,7 +166,7 @@ def BMaxholdmode():
     TRACEreset = True       # Reset trace peak and trace average
     TRACEmode = 2
     UpdateScreen()          # Always Update
-    
+
 
 def BAveragemode():
     global TRACEmode
@@ -167,10 +174,6 @@ def BAveragemode():
     global TRACEreset
     global RUNstatus
 
-    #if (RUNstatus != 0):
-    #    showwarning("WARNING","Stop sweep first")
-    #    return()
-    
     TRACEreset = True       # Reset trace peak and trace average
     TRACEmode = 3
 
@@ -196,7 +199,7 @@ def BAveragemode():
 def BFFTwindow():
     global FFTwindow
     global TRACEreset
-    
+
     FFTwindow = FFTwindow + 1
     if FFTwindow > 6:
         FFTwindow = 0
@@ -208,10 +211,10 @@ def BSampledepth():
     global SAMPLEdepth
     global RUNstatus
 
-    if (RUNstatus != 0):
+    if RUNstatus != 0:
         showwarning("WARNING","Stop sweep first")
         return()
-    
+
     if SAMPLEdepth == 0:
         SAMPLEdepth = 1
     else:
@@ -235,21 +238,21 @@ def BSTOREtrace():
 def BSINGLEsweep():
     global SWEEPsingle
     global RUNstatus
-    
+
     if (RUNstatus != 0):
         showwarning("WARNING","Stop sweep first")
         return()
     else:
         SWEEPsingle = True
         RUNstatus = 1       # we are stopped, start
-    UpdateScreen()          # Always Update    
+    UpdateScreen()          # Always Update
 
 def BSNmode():
     global RUNstatus
     global SNmeasurement
     global SNresult
     global SNwidth
-    
+
     if SNwidth == 0:
         SNwidth = 1
         SNmeasurement = True
@@ -336,7 +339,7 @@ def BSNfstep2():
 
 def BStart():
     global RUNstatus
-    
+
     if (RUNstatus == 0):
         RUNstatus = 1
     UpdateScreen()          # Always Update
@@ -347,7 +350,7 @@ def Blevel1():
     global DBlevel
 
     DBlevel = DBlevel - 1
-    
+
     if RUNstatus == 0:      # Update if stopped
         UpdateTrace()
 
@@ -357,7 +360,7 @@ def Blevel2():
     global DBlevel
 
     DBlevel = DBlevel + 1
-    
+
     if RUNstatus == 0:      # Update if stopped
         UpdateTrace()
 
@@ -367,7 +370,7 @@ def Blevel3():
     global DBlevel
 
     DBlevel = DBlevel - 10
-    
+
     if RUNstatus == 0:      # Update if stopped
         UpdateTrace()
 
@@ -377,14 +380,14 @@ def Blevel4():
     global DBlevel
 
     DBlevel = DBlevel + 10
-    
+
     if RUNstatus == 0:      # Update if stopped
         UpdateTrace()
 
 
 def BStop():
     global RUNstatus
-    
+
     if (RUNstatus == 1):
         RUNstatus = 0
     elif (RUNstatus == 2):
@@ -403,11 +406,11 @@ def BSetup():
     global SIGNAL1
     global T1line
     global TRACEreset
-    
+
     #if (RUNstatus != 0):
    #    showwarning("WARNING","Stop sweep first")
-    #    return()    
- 
+    #    return()
+
     s = askstring("Zero padding","For better interpolation of levels between frequency samples.\nIncreases processing time!\n\nValue: " + str(ZEROpadding) + "\n\nNew value:\n(0-5, 0 is no zero padding)")
 
     if (s == None):         # If Cancel pressed, then None
@@ -437,9 +440,9 @@ def BStartfrequency():
     # if (RUNstatus != 0):
     #    showwarning("WARNING","Stop sweep first")
     #    return()
-    
+
     s = askstring("Startfrequency: ","Value: " + str(STARTfrequency) + " Hz\n\nNew value:\n")
-    
+
     if (s == None):         # If Cancel pressed, then None
         return()
 
@@ -462,7 +465,7 @@ def BStopfrequency():
     global STARTfrequency
     global STOPfrequency
     global RUNstatus
-    
+
     # if (RUNstatus != 0):
     #    showwarning("WARNING","Stop sweep first")
     #    return()
@@ -482,7 +485,7 @@ def BStopfrequency():
 
     if STOPfrequency < 10:  # Minimum stopfrequency 10 Hz
         STOPfrequency = 10
-        
+
     if STARTfrequency >= STOPfrequency:
         STARTfrequency = STOPfrequency - 1
 
@@ -493,7 +496,7 @@ def BStopfrequency():
 def BDBdiv1():
     global DBdivindex
     global RUNstatus
-    
+
     if (DBdivindex >= 1):
         DBdivindex = DBdivindex - 1
     if RUNstatus == 0:      # Update if stopped
@@ -504,7 +507,7 @@ def BDBdiv2():
     global DBdivindex
     global DBdivlist
     global RUNstatus
-    
+
     if (DBdivindex < len(DBdivlist) - 1):
         DBdivindex = DBdivindex + 1
     if RUNstatus == 0:      # Update if stopped
@@ -514,155 +517,13 @@ def BDBdiv2():
 
 
 # ============================================ Main routine ====================================================
-    
-def Sweep():   # Read samples and store the data into the arrays
-    global X0L          # Left top X value
-    global Y0T          # Left top Y value
-    global GRW          # Screenwidth
-    global GRH          # Screenheight
-    global SIGNAL1
-    global RUNstatus
-    global SWEEPsingle
-    global SMPfftlist
-    global SMPfftindex
-    global SAMPLErate
-    global SAMPLEsize
-    global SAMPLEdepth
-    global UPDATEspeed
-    global STARTfrequency
-    global STOPfrequency
-    global COLORred    
-    global COLORcanvas
-    global COLORyellow
-    global COLORgreen
-    global COLORmagenta
-    
-    while (True):                                           # Main loop
 
-
-        # RUNstatus = 1 : Open Stream
-        if (RUNstatus == 1):
-            if UPDATEspeed < 1:
-                UPDATEspeed = 1.0
-
-            TRACESopened = 1
-
-            try:
-# Get the USB device, e.g. 'USB0::0x1AB1::0x0588::DS1ED141904883'
-                instruments = visa.get_instruments_list()
-                usb = filter(lambda x: 'USB' in x, instruments)
-                if len(usb) != 1:
-                    print 'Bad instrument list', instruments
-                    sys.exit(-1)
-                scope = visa.instrument(usb[0], timeout=20, chunk_size=1024000) # bigger timeout for long mem
-
-                RUNstatus = 2
-            except:                                         # If error in opening audio stream, show error
-                RUNstatus = 0
-                #txt = "Sample rate: " + str(SAMPLErate) + ", try a lower sample rate.\nOr another audio device."
-                showerror("VISA Error","Cannot open scope")
-
-# get metadata
-            #sample_rate = float(scope.ask(':ACQ:SAMP?'))
-            #timescale = float(scope.ask(":TIM:SCAL?"))
-            #timeoffset = float(scope.ask(":TIM:OFFS?"))
-            #voltscale = float(scope.ask(':CHAN1:SCAL?'))
-            #voltoffset = float(scope.ask(":CHAN1:OFFS?"))
-                
-            UpdateScreen()                                  # UpdateScreen() call        
-
-            
-        # RUNstatus = 2: Reading audio data from soundcard
-        if (RUNstatus == 2):
-        # Grab the raw data from channel 1
-            #try:
-# Set the scope the way we want it
-            if SAMPLEdepth == 0:
-                scope.write(':ACQ:MEMD NORM') # Long memory type
-            else:
-                scope.write(':ACQ:MEMD LONG') # normal memory type
-            #scope.write(':CHAN1:COUP DC') # DC coupling
-            #scope.write(':CHAN1:DISP ON') # Channel 1 on
-            #scope.write(':CHAN2:DISP ON') # Channel 2 off
-            #scope.write(':CHAN1:SCAL 1') # Channel 1 vertical scale 1 volts
-            #scope.write(':CHAN1:OFFS -2') # Channel 1 vertical offset 2 volts
-            #scope.write(':TIM:SCAL 0.001') # time interval
-            #scope.write(':TIM:OFFS .05') # Offset time 50 ms
-
-            #scope.write(':TRIG:EDGE:SOUR CHAN1') # Edge-trigger from channel 1
-            #scope.write(':TRIG:EDGE:SWE SING') # Single trigger
-            #scope.write(':TRIG:EDGE:COUP AC') # trigger coupling
-            #scope.write(':TRIG:EDGE:SLOP NEG') # Trigger on negative edge
-            #scope.write(':TRIG:EDGE:LEV 0.01') # Trigger  volts
-            scope.write(":RUN")
-            
-            #txt = "Trig"
-            #x = X0L + 250
-            #y = Y0T+GRH+32
-            #IDtxt  = ca.create_text (x, y, text=txt, anchor=W, fill=COLORyellow)
-            #root.update()       # update screen
-            
-            while scope.ask(':TRIG:STAT?') != 'STOP':
-                sleep(0.1)
-            #sleep(0.1)
-    # Grab the raw data from channel 1, which will take a few seconds for long buffer mode
-
-            scope.write(":STOP")
-            scope.write(":WAV:POIN:MODE RAW")
-
-            txt = "->Acquire"
-            x = X0L + 275
-            y = Y0T+GRH+32
-            IDtxt  = ca.create_text (x, y, text=txt, anchor=W, fill=COLORgreen)
-            root.update()       # update screen 
-
-
-            signals= scope.ask(":WAV:DATA? CHAN1")  #do this first
-            data_size = len(signals)
-            
-            SAMPLErate = scope.ask_for_values(':ACQ:SAMP?')[0] #do this second
-            #print 'Data size:', SAMPLEsize, "Sample rate:", SAMPLErate
-
-
-
-            sleep(0.1)               
-
-# convert data from (inverted) bytes to an array of scaled floats
-# this magic from Matthew Mets
-            SIGNAL1 = numpy.frombuffer(signals, 'B')
-            #print SIGNAL1
-            SIGNAL1 = (SIGNAL1 * -1 + 255) -130  # invert
-            #print SIGNAL1
-            SIGNAL1 = SIGNAL1/127.0 # scale 10 +-1, has a slight DC offset
-            #print SIGNAL1
-          
-            UpdateAll()                                     # Update Data, trace and screen
-
-            if SWEEPsingle == True:  # single sweep mode, sweep once then stop
-                SWEEPsingle = False
-                RUNstatus = 3
-                
-        # RUNstatus = 3: Stop
-        # RUNstatus = 4: Stop and restart
-        if (RUNstatus == 3) or (RUNstatus == 4):
-            scope.write(":KEY:FORCE")
-            scope.close()
-            if RUNstatus == 3:
-                RUNstatus = 0                               # Status is stopped 
-            if RUNstatus == 4:          
-                RUNstatus = 1                               # Status is (re)start
-            UpdateScreen()                                  # UpdateScreen() call
-
-
-        # Update tasks and screens by TKinter 
-        root.update_idletasks()
-        root.update()                                       # update screens
-
+# Sweep
 
 def UpdateAll():        # Update Data, trace and screen
     DoFFT()             # Fast Fourier transformation
     MakeTrace()         # Update the traces
-    UpdateScreen()      # Update the screen 
+    UpdateScreen()      # Update the screen
 
 
 def UpdateTrace():      # Update trace and screen
@@ -672,7 +533,7 @@ def UpdateTrace():      # Update trace and screen
 
 def UpdateScreen():     # Update screen with trace and text
     MakeScreen()        # Update the screen
-    root.update()       # Activate updated screens    
+    root.update()       # Activate updated screens
 
 
 def DoFFT():            # Fast Fourier transformation
@@ -690,38 +551,42 @@ def DoFFT():            # Fast Fourier transformation
     global SMPfftlist
     global SMPfftindex
     global LONGfftsize
+    global CANVAS
 
 #show what we are doing on the screen
 # FFT can take a long time!
     txt = "->FFT"
     x = X0L + 333
     y = Y0T+GRH+32
-    IDtxt  = ca.create_text (x, y, text=txt, anchor=W, fill=COLORred)
+    IDtxt  = CANVAS.create_text (x, y, text=txt, anchor=W, fill=COLORred)
     root.update()       # update screen
-            
+
     T1 = time.time()                        # For time measurement of FFT routine
-    
+
     REX = []
     IMX = []
 
-  
+    logger.debug("Got {} samples from scope".format(len(SIGNAL1)))
 
-    # No FFT if empty or too short array of audio samples
-    if len(SIGNAL1) >= 1048576: # ensure only valid buffer sizes
-        fftsamples = LONGfftsize # can set this to be less than buffer size to make it faster    
-    elif len(SIGNAL1) >= 16384: # ensure only valid buffer sizes
-        fftsamples = 16384           
-    elif len(SIGNAL1) >= 8192: # ensure only valid buffer sizes
-        fftsamples = 8192
-    else:
+    # ensure we've got fewer than LONGfftsize samples to keep things fast
+    fftsamples = min(len(SIGNAL1), LONGfftsize)
+
+    if fftsamples < 8192:
+        logger.error("Must have at least 8192 samples to run FFT. Got {} samples".format(len(SIGNAL1)))
         return  # not a valid buffer size
-    #print "Buffersize:" + str(len(SIGNAL1)) + " FFTsize: " + str(fftsamples)
-    SAMPLEsize= fftsamples
-    
+    else:
+        # ensure we've got a power of 2 number of samples
+        fftsamples = 2 ** int(math.log(fftsamples) / math.log(2))
+
+    SAMPLEsize = fftsamples
+    logger.info("Running FFT with {} samples".format(fftsamples))
+
+    assert(fftsamples <= len(SIGNAL1))
+
     n = 0
     SIGNALlevel = 0.0
     v = 0.0
-    m = 0                                   # For calculation of correction factor 
+    m = 0                                   # For calculation of correction factor
     while n < fftsamples:
 
         v=SIGNAL1[n]
@@ -761,12 +626,12 @@ def DoFFT():            # Fast Fourier transformation
             w = 0.355768 - 0.487396 * math.cos(2 * math.pi * n / (fftsamples - 1)) + 0.144232 * math.cos(4 * math.pi * n / (fftsamples - 1))- 0.012604 * math.cos(6 * math.pi * n / (fftsamples - 1))
             v = w * v * 2.811
 
-        # Flat top window, 
+        # Flat top window,
         # medium-dynamic range, extra wide bandwidth B=3.77
         if FFTwindow == 6:
             w = 1.0 - 1.93 * math.cos(2 * math.pi * n / (fftsamples - 1)) + 1.29 * math.cos(4 * math.pi * n / (fftsamples - 1))- 0.388 * math.cos(6 * math.pi * n / (fftsamples - 1)) + 0.032 * math.cos(8 * math.pi * n / (fftsamples - 1))
             v = w * v * 1.000
-        
+
         # m = m + w / fftsamples                # For calculation of correction factor
         REX.append(v)                           # Append the value to the REX array
         IMX.append(0.0)                       # Append 0 to the imagimary part
@@ -795,7 +660,7 @@ def DoFFT():            # Fast Fourier transformation
     FFTresult = []
 
     #print len(FFTmemory)
-    
+
     n = 0
     while (n <= fftsamples / 2):
         # For relative to voltage: v = math.sqrt(REX[n] * REX[n] + IMX[n] * IMX[n])    # Calculate absolute value from re and im
@@ -859,14 +724,14 @@ def MakeTrace():        # Update the grid and trace
     # Vertical conversion factors (level dBs) and border limits
     Yconv = float(GRH) / (Vdiv * DBdivlist[DBdivindex])     # Conversion factors from dBs to screen points 10 is for 10 * log(power)
     #Yc = float(Y0T) + GRH + Yconv * (DBlevel -90)           # Zero postion and -90 dB for in grid range
-    Yc = float(Y0T) + GRH + Yconv * (DBlevel -(Vdiv * DBdivlist[DBdivindex])) 
+    Yc = float(Y0T) + GRH + Yconv * (DBlevel -(Vdiv * DBdivlist[DBdivindex]))
     Ymin = Y0T                                              # Minimum position of screen grid (top)
     Ymax = Y0T + GRH                                        # Maximum position of screen grid (bottom)
 
 
     # Horizontal conversion factors (frequency Hz) and border limits
     Fpixel = float(STOPfrequency - STARTfrequency) / GRW    # Frequency step per screen pixel
-    Fsample = float(SAMPLErate / 2) / (TRACEsize - 1)       # Frequency step per sample   
+    Fsample = float(SAMPLErate / 2) / (TRACEsize - 1)       # Frequency step per sample
 
     T1line = []
     n = 0
@@ -882,7 +747,7 @@ def MakeTrace():        # Update the grid and trace
                 y =  Yc - Yconv * 10 * math.log10(float(FFTresult[n]))  # Convert power to DBs, except for log(0) error
             except:
                 y = Ymax
-                
+
             if (y < Ymin):
                 y = Ymin
             if (y > Ymax):
@@ -894,8 +759,8 @@ def MakeTrace():        # Update the grid and trace
 
         if SNenabled == True and (F >= STARTsignalfreq and F <= STOPsignalfreq):                # Add to signal if inside signal band
             Slevel = Slevel + float(FFTresult[n])
-             
-        n = n + 1               
+
+        n = n + 1
 
     try:
         SNresult = 10 * math.log10(Slevel / Nlevel)
@@ -910,7 +775,7 @@ def MakeTrace():        # Update the grid and trace
     if  SNenabled == True and SNmeasurement == True:
         STARTsignalfreq = CENTERsignalfreq - CENTERsignalfreq * float(SNwidth) / 100
         STOPsignalfreq = CENTERsignalfreq + CENTERsignalfreq * float(SNwidth) / 100
-        
+
         if STARTsignalfreq >= STARTfrequency and STARTsignalfreq <= STOPfrequency:
             x = X0L + (STARTsignalfreq - STARTfrequency)  / Fpixel
             S1line.append(int(x + 0.5))
@@ -964,17 +829,18 @@ def MakeScreen():       # Update the screen with traces and text
     global COLORtext
     global COLORsignalband
     global COLORaudiobar
-    global COLORaudiook 
+    global COLORaudiook
     global COLORaudiomax
     global CANVASwidth
     global CANVASheight
+    global CANVAS
 
 
     # Delete all items on the screen
-    de = ca.find_enclosed ( 0, 0, CANVASwidth+1000, CANVASheight+1000)    
-    for n in de: 
-        ca.delete(n)
- 
+    de = CANVAS.find_enclosed ( 0, 0, CANVASwidth+1000, CANVASheight+1000)
+    for n in de:
+        CANVAS.delete(n)
+
 
     # Draw horizontal grid lines
     i = 0
@@ -986,9 +852,9 @@ def MakeScreen():       # Update the screen with traces and text
     while (i <= Vdiv):
         y = Y0T + i * GRH/Vdiv
         Dline = [x1,y,x2,y]
-        ca.create_line(Dline, fill=COLORgrid)
+        CANVAS.create_line(Dline, fill=COLORgrid)
         txt = str(db) # db labels
-        idTXT = ca.create_text (x3, y-5, text=txt, anchor=W, fill=COLORtext)
+        idTXT = CANVAS.create_text (x3, y-5, text=txt, anchor=W, fill=COLORtext)
         db = db - DBdivlist[DBdivindex]
         i = i + 1
 
@@ -1002,29 +868,29 @@ def MakeScreen():       # Update the screen with traces and text
     while (i < 11):
         x = X0L + i * GRW/10
         Dline = [x,y1,x,y2]
-        ca.create_line(Dline, fill=COLORgrid)
+        CANVAS.create_line(Dline, fill=COLORgrid)
         txt = str(freq/1000000) # freq labels in mhz
         txt= txt + "M"
-        idTXT = ca.create_text (x-10, y2+10, text=txt, anchor=W, fill=COLORtext)
+        idTXT = CANVAS.create_text (x-10, y2+10, text=txt, anchor=W, fill=COLORtext)
         freq=freq+freqstep
         i = i + 1
 
 
     # Draw traces
-    if len(T1line) > 4:                                     # Avoid writing lines with 1 coordinate    
-        ca.create_line(T1line, fill=COLORtrace1)            # Write the trace 1
+    if len(T1line) > 4:                                     # Avoid writing lines with 1 coordinate
+        CANVAS.create_line(T1line, fill=COLORtrace1)            # Write the trace 1
 
     if STOREtrace == True and len(T2line) > 4:              # Write the trace 2 if active
-        ca.create_line(T2line, fill=COLORtrace2)            # and avoid writing lines with 1 coordinate
+        CANVAS.create_line(T2line, fill=COLORtrace2)            # and avoid writing lines with 1 coordinate
 
 
     # Draw SIGNAL band lines
     if SNmeasurement == True:
-        if len(S1line) > 3:                                 # Avoid writing lines with 1 coordinate    
-            ca.create_line(S1line, fill=COLORsignalband)    # Write the start frequency line of the signal band
+        if len(S1line) > 3:                                 # Avoid writing lines with 1 coordinate
+            CANVAS.create_line(S1line, fill=COLORsignalband)    # Write the start frequency line of the signal band
 
-        if len(S2line) > 3:                                 # Avoid writing lines with 1 coordinate    
-            ca.create_line(S2line, fill=COLORsignalband)    # Write the stop frequency line of the signal band
+        if len(S2line) > 3:                                 # Avoid writing lines with 1 coordinate
+            CANVAS.create_line(S2line, fill=COLORsignalband)    # Write the stop frequency line of the signal band
 
 
     # General information on top of the grid
@@ -1034,7 +900,7 @@ def MakeScreen():       # Update the screen with traces and text
     #txt = txt + "    FFT samples: " + str(SMPfftlist[SMPfftindex])
     txt = txt + "    FFT size: " + str(fftsamples)
     txt = txt + "    RBW: " + str(int((SAMPLErate/SAMPLEsize)/2))+" Hz"
-    
+
     if FFTwindow == 0:
         txt = txt + "    Rectangular (no) window (B=1) "
     if FFTwindow == 1:
@@ -1049,10 +915,10 @@ def MakeScreen():       # Update the screen with traces and text
         txt = txt + "    Nuttall window (B=2.02) "
     if FFTwindow == 6:
         txt = txt + "    Flat top window (B=3.77) "
-        
+
     x = X0L
     y = 12
-    idTXT = ca.create_text (x, y, text=txt, anchor=W, fill=COLORtext)
+    idTXT = CANVAS.create_text (x, y, text=txt, anchor=W, fill=COLORtext)
 
 
     # Start and stop frequency and dB/div and trace mode
@@ -1065,26 +931,26 @@ def MakeScreen():       # Update the screen with traces and text
 
     if TRACEmode == 2:
         txt = txt + "    Maximum hold mode "
-    
+
     if TRACEmode == 3:
-        txt = txt + "    Power average  mode (" + str(TRACEaverage) + ") " 
+        txt = txt + "    Power average  mode (" + str(TRACEaverage) + ") "
 
     if SNenabled == True and SNmeasurement == True:
         txt1 = str(int(SNresult * 10))
         while len(txt) < 2:
-            txt1 = "0" + txt1 
+            txt1 = "0" + txt1
         txt1 = txt1[:-1] + "." + txt1[-1:]
         txt = txt + "    Signal to Noise ratio (dB): " + txt1
 
     x = X0L +500
     y = Y0T+GRH+32
-    idTXT = ca.create_text (x, y, text=txt, anchor=W, fill=COLORtext)
+    idTXT = CANVAS.create_text (x, y, text=txt, anchor=W, fill=COLORtext)
 
 
     # Soundcard level bargraph
     txt1 = "||||||||||||||||||||"   # Bargraph
     le = len(txt1)                  # length of bargraph
-        
+
     t = int(math.sqrt(SIGNALlevel) * le)
 
     n = 0
@@ -1096,12 +962,12 @@ def MakeScreen():       # Update the screen with traces and text
     x = X0L
     y = Y0T+GRH+32
 
-    IDtxt = ca.create_text (x, y, text=txt1, anchor=W, fill=COLORaudiobar)
+    IDtxt = CANVAS.create_text (x, y, text=txt1, anchor=W, fill=COLORaudiobar)
 
     if SIGNALlevel >= 1.0:
-        IDtxt = ca.create_text (x, y, text=txt, anchor=W, fill=COLORaudiomax)
+        IDtxt = CANVAS.create_text (x, y, text=txt, anchor=W, fill=COLORaudiomax)
     else:
-        IDtxt = ca.create_text (x, y, text=txt, anchor=W, fill=COLORaudiook)
+        IDtxt = CANVAS.create_text (x, y, text=txt, anchor=W, fill=COLORaudiook)
 
 
     # Runstatus and level information
@@ -1109,162 +975,181 @@ def MakeScreen():       # Update the screen with traces and text
         txt = "LONG"
     else:
         txt = "NORM"
-        
+
     if (RUNstatus == 0) or (RUNstatus == 3):
         txt = txt + " Sweep stopped"
     else:
         txt = txt + " Sweep running"
 
 
-    
+
     x = X0L + 100
     y = Y0T+GRH+32
-    IDtxt  = ca.create_text (x, y, text=txt, anchor=W, fill=COLORtext)
+    IDtxt  = CANVAS.create_text (x, y, text=txt, anchor=W, fill=COLORtext)
 
 # show the values at the mouse cursor
 # note the magic numbers below were determined by looking at the cursor values
 # not sure why they don't correspond to X0T and Y0T
     cursorx = (STARTfrequency + (root.winfo_pointerx()-root.winfo_rootx()-X0L-4) * (STOPfrequency-STARTfrequency)/GRW) /1000000
-    cursory = DBlevel - (root.winfo_pointery()-root.winfo_rooty()-Y0T-50) * Vdiv*DBdivlist[DBdivindex] /GRH 
-    
+    cursory = DBlevel - (root.winfo_pointery()-root.winfo_rooty()-Y0T-50) * Vdiv*DBdivlist[DBdivindex] /GRH
+
     txt = "Cursor " + str(cursorx)  + " MHz   " + str(cursory) + " dB"
-        
+
     x = X0L+800
     y = 12
-    idTXT = ca.create_text (x, y, text=txt, anchor=W, fill=COLORtext)
+    idTXT = CANVAS.create_text (x, y, text=txt, anchor=W, fill=COLORtext)
 """
     Marker1valid=False
     if ((Marker1x > 20) & (Marker1y >20)): # show on screen markers
         Marker1valid=True
-        idTXT = ca.create_text (Marker1x-3, Marker1y+4, text="^", anchor=W, fill=COLORMarker1)
+        idTXT = CANVAS.create_text (Marker1x-3, Marker1y+4, text="^", anchor=W, fill=COLORMarker1)
         Marker1freq = (STARTfrequency + (Marker1x-19) * (STOPfrequency-STARTfrequency)/GRW) /1000000
-        Marker1db = DBlevel - (Marker1y-20) * Vdiv*DBdivlist[DBdivindex] /GRH 
-        txt = "Marker1 " + str(Marker1freq)  + " MHz   " + str(Marker1db) + " dB"    
+        Marker1db = DBlevel - (Marker1y-20) * Vdiv*DBdivlist[DBdivindex] /GRH
+        txt = "Marker1 " + str(Marker1freq)  + " MHz   " + str(Marker1db) + " dB"
         x = X0L + 300
         y = Y0T -10
-        idTXT = ca.create_text (x, y, text=txt, anchor=W, fill=COLORMarker1)
+        idTXT = CANVAS.create_text (x, y, text=txt, anchor=W, fill=COLORMarker1)
 
     Marker2valid=False
     if ((Marker2x > 20) & (Marker2y >20)): # show on screen markers
         Marker2valid=True
-        idTXT = ca.create_text (Marker2x-3, Marker2y+4, text="^", anchor=W, fill=COLORMarker2)
+        idTXT = CANVAS.create_text (Marker2x-3, Marker2y+4, text="^", anchor=W, fill=COLORMarker2)
         Marker2freq = (STARTfrequency + (Marker2x-19) * (STOPfrequency-STARTfrequency)/GRW) /1000000
-        Marker2db = DBlevel - (Marker2y-20) * Vdiv*DBdivlist[DBdivindex] /GRH 
-        txt = "Marker2 " + str(Marker2freq)  + " MHz   " + str(Marker2db) + " dB"    
+        Marker2db = DBlevel - (Marker2y-20) * Vdiv*DBdivlist[DBdivindex] /GRH
+        txt = "Marker2 " + str(Marker2freq)  + " MHz   " + str(Marker2db) + " dB"
         x = X0L + 520
         y = Y0T -10
-        idTXT = ca.create_text (x, y, text=txt, anchor=W, fill=COLORMarker2)
-        
+        idTXT = CANVAS.create_text (x, y, text=txt, anchor=W, fill=COLORMarker2)
+
     # show marker delta only if both are valid
-    if (Marker1valid & Marker2valid): 
+    if (Marker1valid & Marker2valid):
         Deltafreq = abs(Marker2freq-Marker1freq)
         Deltadb = abs(Marker2db-Marker1db)
-        txt = "Delta " + str(Deltafreq)  + " MHz   " + str(Deltadb) + " dB"    
+        txt = "Delta " + str(Deltafreq)  + " MHz   " + str(Deltadb) + " dB"
         x = X0L + 750
         y = Y0T -10
-        idTXT = ca.create_text (x, y, text=txt, anchor=W, fill=COLORtext)   
+        idTXT = CANVAS.create_text (x, y, text=txt, anchor=W, fill=COLORtext)
 
 """
 
+def update_status(message, x, y):
+    global X0L
+    global Y0T
+    global GRH
+    global IDtxt
+    global CANVAS
+    global root
+    global COLORgreen
+
+    txt = message
+    x = X0L + x
+    y = Y0T + GRH + y
+    IDtxt = CANVAS.create_text(x, y, text=txt, anchor=W, fill=COLORgreen)
+    root.update() # update screen
+
 # ================ Make Screen ==========================
 
-root=Tk()
-root.title("Rigol Spectrum Analyzer V1.0 09-19-2015 VE3MKC")
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG)
 
-root.minsize(100, 100)
+    logger.debug("Starting up...")
+    root=Tk()
+    root.title("Rigol Spectrum Analyzer V1.0 09-19-2015 VE3MKC")
 
-frame1 = Frame(root, background=COLORframes, borderwidth=5, relief=RIDGE)
-frame1.pack(side=TOP, expand=1, fill=X)
+    root.minsize(100, 100)
 
-frame2 = Frame(root, background="black", borderwidth=5, relief=RIDGE)
-frame2.pack(side=TOP, expand=1, fill=X)
+    frame1 = Frame(root, background=COLORframes, borderwidth=5, relief=RIDGE)
+    frame1.pack(side=TOP, expand=1, fill=X)
 
-if SNenabled == True:
-    frame2a = Frame(root, background=COLORframes, borderwidth=5, relief=RIDGE)
-    frame2a.pack(side=TOP, expand=1, fill=X)
+    frame2 = Frame(root, background="black", borderwidth=5, relief=RIDGE)
+    frame2.pack(side=TOP, expand=1, fill=X)
 
-frame3 = Frame(root, background=COLORframes, borderwidth=5, relief=RIDGE)
-frame3.pack(side=TOP, expand=1, fill=X)
+    if SNenabled == True:
+        frame2a = Frame(root, background=COLORframes, borderwidth=5, relief=RIDGE)
+        frame2a.pack(side=TOP, expand=1, fill=X)
 
-ca = Canvas(frame2, width=CANVASwidth, height=CANVASheight, background=COLORcanvas)
-ca.pack(side=TOP)
+    frame3 = Frame(root, background=COLORframes, borderwidth=5, relief=RIDGE)
+    frame3.pack(side=TOP, expand=1, fill=X)
 
-b = Button(frame1, text="Normal mode", width=Buttonwidth1, command=BNormalmode)
-b.pack(side=LEFT, padx=5, pady=5)
+    CANVAS = Canvas(frame2, width=CANVASwidth, height=CANVASheight, background=COLORcanvas)
+    CANVAS.pack(side=TOP)
 
-b = Button(frame1, text="Max hold", width=Buttonwidth1, command=BMaxholdmode)
-b.pack(side=LEFT, padx=5, pady=5)
-
-b = Button(frame1, text="Average", width=Buttonwidth1, command=BAveragemode)
-b.pack(side=LEFT, padx=5, pady=5)
-
-b = Button(frame1, text="Zero Padding", width=Buttonwidth1, command=BSetup)
-b.pack(side=LEFT, padx=5, pady=5)
-
-b = Button(frame1, text="FFTwindow", width=Buttonwidth1, command=BFFTwindow)
-b.pack(side=LEFT, padx=5, pady=5)
-
-b = Button(frame1, text="Store trace", width=Buttonwidth1, command=BSTOREtrace)
-b.pack(side=RIGHT, padx=5, pady=5)
-
-
-if SNenabled == True:
-    b = Button(frame2a, text="S/N mode", width=Buttonwidth1, command=BSNmode)
+    b = Button(frame1, text="Normal mode", width=Buttonwidth1, command=BNormalmode)
     b.pack(side=LEFT, padx=5, pady=5)
 
-    b = Button(frame2a, text="S/N freq-", width=Buttonwidth1, command=BSNfreq1)
+    b = Button(frame1, text="Max hold", width=Buttonwidth1, command=BMaxholdmode)
     b.pack(side=LEFT, padx=5, pady=5)
 
-    b = Button(frame2a, text="S/N freq+", width=Buttonwidth1, command=BSNfreq2)
+    b = Button(frame1, text="Average", width=Buttonwidth1, command=BAveragemode)
     b.pack(side=LEFT, padx=5, pady=5)
 
-    b = Button(frame2a, text="Fstep-", width=Buttonwidth1, command=BSNfstep1)
+    b = Button(frame1, text="Zero Padding", width=Buttonwidth1, command=BSetup)
     b.pack(side=LEFT, padx=5, pady=5)
 
-    b = Button(frame2a, text="Fstep+", width=Buttonwidth1, command=BSNfstep2)
+    b = Button(frame1, text="FFTwindow", width=Buttonwidth1, command=BFFTwindow)
     b.pack(side=LEFT, padx=5, pady=5)
 
-b = Button(frame3, text="Start", width=Buttonwidth2, command=BStart)
-b.pack(side=LEFT, padx=5, pady=5)
+    b = Button(frame1, text="Store trace", width=Buttonwidth1, command=BSTOREtrace)
+    b.pack(side=RIGHT, padx=5, pady=5)
 
-b = Button(frame3, text="Stop", width=Buttonwidth2, command=BStop)
-b.pack(side=LEFT, padx=5, pady=5)
 
-b = Button(frame3, text="NORM/LONG", width=Buttonwidth1, command=BSampledepth)
-b.pack(side=LEFT, padx=5, pady=5)
+    if SNenabled == True:
+        b = Button(frame2a, text="S/N mode", width=Buttonwidth1, command=BSNmode)
+        b.pack(side=LEFT, padx=5, pady=5)
 
-b = Button(frame3, text="Single", width=Buttonwidth1, command=BSINGLEsweep)
-b.pack(side=LEFT, padx=5, pady=5)
+        b = Button(frame2a, text="S/N freq-", width=Buttonwidth1, command=BSNfreq1)
+        b.pack(side=LEFT, padx=5, pady=5)
 
-b = Button(frame3, text="Startfreq", width=Buttonwidth2, command=BStartfrequency)
-b.pack(side=LEFT, padx=5, pady=5)
+        b = Button(frame2a, text="S/N freq+", width=Buttonwidth1, command=BSNfreq2)
+        b.pack(side=LEFT, padx=5, pady=5)
 
-b = Button(frame3, text="Stopfreq", width=Buttonwidth2, command=BStopfrequency)
-b.pack(side=LEFT, padx=5, pady=5)
+        b = Button(frame2a, text="Fstep-", width=Buttonwidth1, command=BSNfstep1)
+        b.pack(side=LEFT, padx=5, pady=5)
 
-b = Button(frame3, text="+dB/div", width=Buttonwidth2, command=BDBdiv2)
-b.pack(side=RIGHT, padx=5, pady=5)
+        b = Button(frame2a, text="Fstep+", width=Buttonwidth1, command=BSNfstep2)
+        b.pack(side=LEFT, padx=5, pady=5)
 
-b = Button(frame3, text="-dB/div", width=Buttonwidth2, command=BDBdiv1)
-b.pack(side=RIGHT, padx=5, pady=5)
+    b = Button(frame3, text="Start", width=Buttonwidth2, command=BStart)
+    b.pack(side=LEFT, padx=5, pady=5)
 
-b = Button(frame3, text="LVL+10", width=Buttonwidth2, command=Blevel4)
-b.pack(side=RIGHT, padx=5, pady=5)
+    b = Button(frame3, text="Stop", width=Buttonwidth2, command=BStop)
+    b.pack(side=LEFT, padx=5, pady=5)
 
-b = Button(frame3, text="LVL-10", width=Buttonwidth2, command=Blevel3)
-b.pack(side=RIGHT, padx=5, pady=5)
+    b = Button(frame3, text="NORM/LONG", width=Buttonwidth1, command=BSampledepth)
+    b.pack(side=LEFT, padx=5, pady=5)
 
-b = Button(frame3, text="LVL+1", width=Buttonwidth2, command=Blevel2)
-b.pack(side=RIGHT, padx=5, pady=5)
+    b = Button(frame3, text="Single", width=Buttonwidth1, command=BSINGLEsweep)
+    b.pack(side=LEFT, padx=5, pady=5)
 
-b = Button(frame3, text="LVL-1", width=Buttonwidth2, command=Blevel1)
-b.pack(side=RIGHT, padx=5, pady=5)
+    b = Button(frame3, text="Startfreq", width=Buttonwidth2, command=BStartfrequency)
+    b.pack(side=LEFT, padx=5, pady=5)
 
-# ================ Call main routine ===============================
-root.update()               # Activate updated screens
-#SELECTaudiodevice()
-Sweep()
+    b = Button(frame3, text="Stopfreq", width=Buttonwidth2, command=BStopfrequency)
+    b.pack(side=LEFT, padx=5, pady=5)
 
- 
+    b = Button(frame3, text="+dB/div", width=Buttonwidth2, command=BDBdiv2)
+    b.pack(side=RIGHT, padx=5, pady=5)
 
+    b = Button(frame3, text="-dB/div", width=Buttonwidth2, command=BDBdiv1)
+    b.pack(side=RIGHT, padx=5, pady=5)
+
+    b = Button(frame3, text="LVL+10", width=Buttonwidth2, command=Blevel4)
+    b.pack(side=RIGHT, padx=5, pady=5)
+
+    b = Button(frame3, text="LVL-10", width=Buttonwidth2, command=Blevel3)
+    b.pack(side=RIGHT, padx=5, pady=5)
+
+    b = Button(frame3, text="LVL+1", width=Buttonwidth2, command=Blevel2)
+    b.pack(side=RIGHT, padx=5, pady=5)
+
+    b = Button(frame3, text="LVL-1", width=Buttonwidth2, command=Blevel1)
+    b.pack(side=RIGHT, padx=5, pady=5)
+
+    # ================ Call main routine ===============================
+    root.update()               # Activate updated screens
+
+    MakeScreen()
+
+    connection_string = sys.argv[1]
+    sweep.sweep(connection_string, sys.modules[__name__])
 
