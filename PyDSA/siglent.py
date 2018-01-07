@@ -36,7 +36,7 @@ def connect(ip_address):
 	scope = vxi11.Instrument(ip_address)
 	return scope
 
-def acquire(scope, long_memory=False, max_samples=2**23):
+def acquire(scope, long_memory=False, desired_samples=2**23):
 	'''Grab the raw data from channel 1'''
 
 	## SCOPE SETUP
@@ -58,19 +58,43 @@ def acquire(scope, long_memory=False, max_samples=2**23):
 	# TODO: Ensure scope set up to generate enough sample points
 	# From user manual p 55:
 	# Memory depth = sample rate (Sa/s) × waveform length (s/div × div)
-	# 1e9 Sa/s * 1e-3 s/div * 14 div = 14e6 Sa
-	# So set to 1 ms/dev
-	scope.write('TDIV 1ms')
-	scope.write('WFSU TYPE,1')
-	scope.write('WFSU NP,{}'.format(max_samples))
+	# e.g. 1e9 Sa/s * 1e-3 s/div * 14 div = 14e6 Sa
+	# Options include 1US,2US,5US,10US,20US,50US,100US,200US,500US,1MS
+	# So set to 1 ms/div for 14 MSa (which is max TDIV that will use 1 GSA/s)
+	# So set to 1 us/div for 14 kSa (below which we don't collect minimum 8192 samples)
+	tdivs = {
+		1e-6:  '1US',
+		2e-6:  '2US',
+		5e-6:  '5US',
+		10e-6: '10US',
+		20e-6: '20US',
+		50e-6: '50US',
+		100e-6:'100US',
+		200e-6:'200US',
+		500e-6:'500US',
+		1e-3:  '1MS',
+	}
+
+	min_tdiv = desired_samples / (1e9 * 14)
+	tdiv = min(t for t in tdivs if t > min_tdiv)
+	tdiv_string = tdivs[tdiv]
+	scope.write('TDIV {}'.format(tdiv_string))
+	logger.debug("Set scope for {} per division for at least {} samples".format(tdiv_string, desired_samples))
+
+	# n.b. Setting NP (number points) seems to corrupt the data; limit points with TDIV instead
+	scope.write('WFSU SP,0,NP,0,FP,0')
+	#scope.write('WFSU SP,0,NP,{},FP,0'.format(desired_samples))
+	#scope.write('WFSU TYPE,1')
 
 	sleep(0.1)               
 
     ## DATA RETRIEVAL
 
-	# TODO: Set desired number of sample points using WFSU to avoid collecting more than we'll use
 	trace_bytes = scope.ask_raw("C1:WF? DAT2")
 	sample_rate_string = scope.ask('SARA?')
+
+	logger.debug("{} samples available".format(scope.ask('SANU? C1')))
+	logger.debug("{} samples retrieved".format(len(trace_bytes) - 21 - 2))
 
 	## DATA CONVERSION AND FORMATTING
 
