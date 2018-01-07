@@ -31,6 +31,50 @@ def parse_sample_rate(sample_rate_string):
 	sample_rate = int(match.group(1)) * multipliers[match.group(2)]
 	return sample_rate
 
+def parse_tdiv(tdiv_string):
+	'''Parse TDIV? response from scope'''
+	# u'TDIV 1.00E-05S'
+	
+	match = re.match(r'TDIV (.*)S$', tdiv_string)
+
+	if match is None:
+		raise Exception("Unable to read time division string from Siglent scope: {}".format(tdiv_string))
+	
+	tdiv = float(match.group(1).lower())
+	return tdiv
+
+def set_tdiv(scope, desired_samples):
+	# TODO: Ensure scope set up to generate enough sample points
+	# From user manual p 55:
+	# Memory depth = sample rate (Sa/s) × waveform length (s/div × div)
+	# e.g. 1e9 Sa/s * 1e-3 s/div * 14 div = 14e6 Sa
+	# Options include 1US,2US,5US,10US,20US,50US,100US,200US,500US,1MS
+	# So set to 1 ms/div for 14 MSa (which is max TDIV that will use 1 GSA/s)
+	# So set to 1 us/div for 14 kSa (below which we don't collect minimum 8192 samples)
+	tdivs = {
+		1e-6:  '1US',
+		2e-6:  '2US',
+		5e-6:  '5US',
+		10e-6: '10US',
+		20e-6: '20US',
+		50e-6: '50US',
+		100e-6:'100US',
+		200e-6:'200US',
+		500e-6:'500US',
+		1e-3:  '1MS',
+	}
+
+	min_tdiv = desired_samples / (1e9 * 14)
+	tdiv = min(t for t in tdivs if t > min_tdiv)
+	tdiv_string = tdivs[tdiv]
+
+	current_tdiv = parse_tdiv(scope.ask('TDIV?'))
+	if current_tdiv != tdiv:
+		logger.debug("Updating TDIV from {} s to {}".format(current_tdiv, tdiv_string))
+		scope.write('TDIV {}'.format(tdiv_string))
+
+	logger.debug("Set scope for {} per division for at least {} samples".format(tdiv_string, desired_samples))
+
 def connect(ip_address):
 	logger.debug("Connecting to Siglent scope via IP at {}".format(ip_address))
 	scope = vxi11.Instrument(ip_address)
@@ -55,31 +99,7 @@ def acquire(scope, long_memory=False, desired_samples=2**23):
 	#scope.write("STOP")
 	#scope.ask("SAST?")
 
-	# TODO: Ensure scope set up to generate enough sample points
-	# From user manual p 55:
-	# Memory depth = sample rate (Sa/s) × waveform length (s/div × div)
-	# e.g. 1e9 Sa/s * 1e-3 s/div * 14 div = 14e6 Sa
-	# Options include 1US,2US,5US,10US,20US,50US,100US,200US,500US,1MS
-	# So set to 1 ms/div for 14 MSa (which is max TDIV that will use 1 GSA/s)
-	# So set to 1 us/div for 14 kSa (below which we don't collect minimum 8192 samples)
-	tdivs = {
-		1e-6:  '1US',
-		2e-6:  '2US',
-		5e-6:  '5US',
-		10e-6: '10US',
-		20e-6: '20US',
-		50e-6: '50US',
-		100e-6:'100US',
-		200e-6:'200US',
-		500e-6:'500US',
-		1e-3:  '1MS',
-	}
-
-	min_tdiv = desired_samples / (1e9 * 14)
-	tdiv = min(t for t in tdivs if t > min_tdiv)
-	tdiv_string = tdivs[tdiv]
-	scope.write('TDIV {}'.format(tdiv_string))
-	logger.debug("Set scope for {} per division for at least {} samples".format(tdiv_string, desired_samples))
+	set_tdiv(scope, desired_samples)
 
 	# n.b. Setting NP (number points) seems to corrupt the data; limit points with TDIV instead
 	scope.write('WFSU SP,0,NP,0,FP,0')
