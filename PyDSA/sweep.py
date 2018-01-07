@@ -23,7 +23,7 @@ def sweep(connection_string, pydsa):   # Read samples and store the data into th
 
 		# RUNstatus = 2: Reading audio data from soundcard
 		if pydsa.RUNstatus == 2:
-			#pydsa.update_status("->Acquire", 275, 32)
+			pydsa.update_status("->Acquire", 275, 32)
 
 			#signals, sample_rate = rigol.acquire(scope, long_memory=(pydsa.SAMPLEdepth == 1))
 			signals, sample_rate = siglent.acquire(scope, max_samples=2**20)
