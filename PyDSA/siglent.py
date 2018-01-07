@@ -72,39 +72,32 @@ def set_tdiv(scope, desired_samples):
 	if current_tdiv != tdiv:
 		logger.debug("Updating TDIV from {} s to {}".format(current_tdiv, tdiv_string))
 		scope.write('TDIV {}'.format(tdiv_string))
-
-	logger.debug("Set scope for {} per division for at least {} samples".format(tdiv_string, desired_samples))
+		logger.debug("Set scope for {} per division for at least {} samples".format(tdiv_string, desired_samples))
 
 def connect(ip_address):
 	logger.debug("Connecting to Siglent scope via IP at {}".format(ip_address))
 	scope = vxi11.Instrument(ip_address)
-	return scope
 
-def acquire(scope, long_memory=False, desired_samples=2**23):
-	'''Grab the raw data from channel 1'''
-
-	## SCOPE SETUP
+	## INITIAL SCOPE SETUP
 
 	# auto setup
-	#scope.write('ASET')
+	scope.write('ASET')
 
 	# enable C1, disable C2
 	scope.write('C1:TRA ON')
 	scope.write('C2:TRA OFF')
 
-	## DATA ACQUISITION
-	#scope.write('TRMD SINGLE')
-	#scope.write('TRMD AUTO')
-	#scope.write("WAIT")
-	#scope.write("STOP")
-	#scope.ask("SAST?")
+	return scope
 
-	set_tdiv(scope, desired_samples)
+def acquire(scope, long_memory=False, desired_samples=2**23):
+	'''Grab the raw data from channel 1'''
 
-	# n.b. Setting NP (number points) seems to corrupt the data; limit points with TDIV instead
+	## PER SWEEP SCOPE SETUP
+
+	# n.b. Setting NP (number points) seems to corrupt the data; set for unlimited (value 0) and
+	#      limit points with TDIV instead
 	scope.write('WFSU SP,0,NP,0,FP,0')
-	#scope.write('WFSU SP,0,NP,{},FP,0'.format(desired_samples))
-	#scope.write('WFSU TYPE,1')
+	set_tdiv(scope, desired_samples)
 
 	sleep(0.1)               
 
@@ -128,11 +121,6 @@ def acquire(scope, long_memory=False, desired_samples=2**23):
 	signals = signals / 127.0 # scale 10 +-1, has a slight DC offset
 
 	sample_rate = parse_sample_rate(sample_rate_string)
-
-	print len(trace_bytes)
-
-	print sample_rate
-	print signals
 
 	return signals, sample_rate
 
